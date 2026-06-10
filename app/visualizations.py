@@ -1,36 +1,45 @@
 """
-Audio visualization utilities for the Streamlit app.
+Audio visualization helpers for the Streamlit front-end.
 
-Provides waveform, Mel-spectrogram, and layer-weight plots with
-a consistent dark aesthetic matching the app theme.
+All plots share a consistent dark theme that matches the app's
+glassmorphism aesthetic. Renders at 120 DPI for crisp output
+on high-resolution displays.
 """
 
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 from torchaudio import transforms
 
 matplotlib.use("Agg")
 
-# Theme colors
+# Shared theme palette
 _BG = "#0e1117"
 _ACCENT = "#818cf8"
-_ACCENT_FILL = "#818cf8"
+_ACCENT_LIGHT = "#a78bfa"
 _GRID = "#1e2030"
 _TEXT = "#94a3b8"
+
+# Global rendering settings
+plt.rcParams.update({
+    "figure.dpi": 120,
+    "savefig.dpi": 120,
+    "lines.antialiased": True,
+    "text.antialiased": True,
+})
 
 
 def plot_waveform(audio: np.ndarray, sample_rate: int) -> plt.Figure:
     """
-    Render a waveform plot.
+    Render an amplitude-over-time waveform.
 
     Args:
-        audio: 1-D numpy array of audio samples.
+        audio:       1-D numpy array of audio samples.
         sample_rate: Sample rate in Hz.
 
     Returns:
-        matplotlib Figure.
+        matplotlib Figure ready for st.pyplot().
     """
     fig, ax = plt.subplots(figsize=(10, 2.5))
     fig.patch.set_facecolor(_BG)
@@ -38,7 +47,7 @@ def plot_waveform(audio: np.ndarray, sample_rate: int) -> plt.Figure:
 
     t = np.linspace(0, len(audio) / sample_rate, len(audio))
     ax.plot(t, audio, color=_ACCENT, linewidth=0.35, alpha=0.9)
-    ax.fill_between(t, audio, alpha=0.12, color=_ACCENT_FILL)
+    ax.fill_between(t, audio, alpha=0.10, color=_ACCENT_LIGHT)
 
     ax.set_xlabel("Time (s)", color=_TEXT, fontsize=9)
     ax.set_ylabel("Amplitude", color=_TEXT, fontsize=9)
@@ -59,11 +68,11 @@ def plot_mel_spectrogram(audio: np.ndarray, sample_rate: int) -> plt.Figure:
     Render a Mel-spectrogram heatmap.
 
     Args:
-        audio: 1-D numpy array of audio samples.
+        audio:       1-D numpy array of audio samples.
         sample_rate: Sample rate in Hz.
 
     Returns:
-        matplotlib Figure.
+        matplotlib Figure ready for st.pyplot().
     """
     waveform = torch.from_numpy(audio).float().unsqueeze(0)
 
@@ -78,8 +87,11 @@ def plot_mel_spectrogram(audio: np.ndarray, sample_rate: int) -> plt.Figure:
     ax.set_facecolor(_BG)
 
     img = ax.imshow(
-        spec[0].numpy(), aspect="auto", origin="lower",
-        cmap="magma", interpolation="bilinear",
+        spec[0].numpy(),
+        aspect="auto",
+        origin="lower",
+        cmap="magma",
+        interpolation="bilinear",
     )
 
     ax.set_xlabel("Time Frames", color=_TEXT, fontsize=9)
@@ -96,13 +108,13 @@ def plot_mel_spectrogram(audio: np.ndarray, sample_rate: int) -> plt.Figure:
 
 def plot_layer_weights(weights: list) -> plt.Figure:
     """
-    Render a horizontal bar chart of Wav2Vec2 layer contribution weights.
+    Render Wav2Vec2 layer contribution weights as a horizontal bar chart.
 
     Args:
         weights: List of 13 floats (softmax-normalized layer weights).
 
     Returns:
-        matplotlib Figure.
+        matplotlib Figure ready for st.pyplot().
     """
     labels = ["CNN"] + [f"T-{i}" for i in range(1, 13)]
     values = np.array(weights)
@@ -112,7 +124,7 @@ def plot_layer_weights(weights: list) -> plt.Figure:
     ax.set_facecolor(_BG)
 
     colors = plt.cm.plasma(np.linspace(0.2, 0.9, len(values)))
-    bars = ax.barh(labels, values, color=colors, height=0.6, edgecolor="none")
+    ax.barh(labels, values, color=colors, height=0.6, edgecolor="none")
 
     ax.set_xlabel("Contribution Weight", color=_TEXT, fontsize=9)
     ax.tick_params(colors=_TEXT, labelsize=8)

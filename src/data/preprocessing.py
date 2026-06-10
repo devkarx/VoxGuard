@@ -1,8 +1,9 @@
 """
 Mel-Spectrogram Preprocessing for the CRNN Baseline.
 
-Converts raw audio files into normalized Mel-spectrogram tensors suitable
-for the DeepfakeCRNN model. Used only by the baseline architecture.
+Converts raw audio files into normalized Mel-spectrogram tensors
+suitable for the DeepfakeCRNN model. Only used by the baseline
+architecture — the Wav2Vec2 model operates on raw waveforms directly.
 """
 
 import logging
@@ -13,45 +14,39 @@ import torch
 import soundfile as sf
 from torchaudio import transforms
 
+from src.config import AudioConfig
+
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-_SAMPLE_RATE = 16000
-_DURATION = 4.0       # seconds
-_N_MELS = 64
-_N_FFT = 1024
-_HOP_LENGTH = 512
+_cfg = AudioConfig()
 
 
 class AudioPreprocessor:
     """
     Loads audio files and extracts Mel-spectrogram features.
 
-    Pipeline: load → mono → resample → pad/truncate → MelSpectrogram → dB scale.
+    Pipeline: load → mono → resample → pad/truncate → Mel-spectrogram → dB scale.
 
     Args:
-        target_sample_rate: Output sample rate (default: 16 kHz).
-        target_duration:    Fixed duration in seconds (default: 4.0).
-        n_mels:             Number of Mel bands (default: 64).
-        n_fft:              FFT window size (default: 1024).
-        hop_length:         STFT hop size (default: 512).
+        target_sample_rate: Output sample rate.
+        target_duration:    Fixed duration in seconds.
+        n_mels:             Number of Mel bands.
+        n_fft:              FFT window size.
+        hop_length:         STFT hop size.
     """
 
     def __init__(
         self,
-        target_sample_rate: int = _SAMPLE_RATE,
-        target_duration: float = _DURATION,
-        n_mels: int = _N_MELS,
-        n_fft: int = _N_FFT,
-        hop_length: int = _HOP_LENGTH,
+        target_sample_rate: int = _cfg.sample_rate,
+        target_duration: float = _cfg.duration,
+        n_mels: int = _cfg.n_mels,
+        n_fft: int = _cfg.n_fft,
+        hop_length: int = _cfg.hop_length,
     ) -> None:
         self.target_sample_rate = target_sample_rate
         self.target_length = int(target_sample_rate * target_duration)
-        self.n_mels = n_mels
 
-        self.mel_spectrogram_transform = transforms.MelSpectrogram(
+        self.mel_transform = transforms.MelSpectrogram(
             sample_rate=target_sample_rate,
             n_fft=n_fft,
             hop_length=hop_length,
@@ -72,32 +67,38 @@ class AudioPreprocessor:
         try:
             audio_data, sample_rate = sf.read(str(file_path))
 
-            # Convert to (1, samples) tensor
+            # Ensure shape is (channels, samples)
             if len(audio_data.shape) == 1:
                 waveform = torch.from_numpy(audio_data).unsqueeze(0).float()
             else:
                 waveform = torch.from_numpy(audio_data).T.float()
 
-            # Mono
+            # Mix to mono
             if waveform.shape[0] > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
 
-            # Resample
+            # Resample if the source rate doesn't match
             if sample_rate != self.target_sample_rate:
                 resampler = transforms.Resample(sample_rate, self.target_sample_rate)
                 waveform = resampler(waveform)
 
-            # Pad or truncate
+            # Pad or truncate to fixed length
             length = waveform.shape[1]
             if length < self.target_length:
                 waveform = torch.nn.functional.pad(waveform, (0, self.target_length - length))
             elif length > self.target_length:
                 waveform = waveform[:, :self.target_length]
 
-            # Feature extraction
-            mel_spec = self.mel_spectrogram_transform(waveform)
+            mel_spec = self.mel_transform(waveform)
             return self.amplitude_to_db(mel_spec)
 
         except Exception as exc:
-            logger.error("Failed to process %s: %s", file_path, exc)
+            logger.error("Preprocessing failed for %s: %s", file_path, exc)
             return None
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"sr={self.target_sample_rate}, "
+            f"length={self.target_length})"
+        )

@@ -1,5 +1,6 @@
 # Virtual environment
 venv/
+.venv/
 
 # Python bytecode
 __pycache__/
@@ -22,3 +23,11 @@ Thumbs.db
 
 # Environment
 .env
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# TensorBoard logs
+runs/

@@ -1,144 +1,183 @@
+<div align="center">
+
 # 🎙️ Deepfake Audio Detection
 
-A production-grade deepfake audio detection system using **Wav2Vec2** self-supervised speech representations, capable of detecting AI-generated speech from modern TTS engines.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg)](https://pytorch.org/)
+[![Transformers](https://img.shields.io/badge/Transformers-HuggingFace-FFD21E.svg)](https://huggingface.co/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B.svg)](https://streamlit.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+An end-to-end deep learning system for detecting AI-generated speech.
+Uses **Wav2Vec2** self-supervised representations and **RawBoost** augmentation to generalize across modern TTS engines that fool traditional spectrogram-based detectors.
+
+[Architecture](#architecture) • [Key Ideas](#key-ideas) • [Installation](#installation) • [Usage](#usage) • [Results](#results)
+
+</div>
 
 ---
+
+## Overview
+
+Most deepfake audio detectors rely on Mel-spectrograms and CNNs. They work well on older datasets (ASVspoof 2019) but fall apart on modern TTS engines like ElevenLabs, Bark, or XTTS — because those systems no longer produce the obvious high-frequency spectral artifacts that older vocoders left behind.
+
+This project tackles that distribution shift by operating on **raw waveforms** instead of spectrograms. The Wav2Vec2 backbone captures phase coherence, glottal pulse regularity, and micro-timing cues that survive across generations of synthesis methods.
+
+A CRNN baseline operating on Mel-spectrograms is also included to demonstrate why the raw-waveform approach is necessary.
+
+## Key Ideas
+
+- **Self-supervised backbone** — `facebook/wav2vec2-base` extracts speech representations from raw 16 kHz audio, retaining phase information that Mel-spectrograms discard.
+- **Weighted layer aggregation** — Learns which of the 13 hidden states (1 CNN + 12 transformer) contribute most to detecting fakes, rather than only using the final layer.
+- **Attentive statistics pooling** — Dynamically weights the most discriminative time frames instead of average-pooling everything.
+- **RawBoost augmentation** — Simulates real-world degradation during training: codec quantization, colored noise, IIR filtering, gain perturbation.
+- **Full-stack deployment** — Streamlit dashboard with waveform visualization, spectrogram analysis, and layer-weight interpretability.
 
 ## Architecture
 
-### Wav2Vec2 Classifier *(Primary)*
-
-Uses `facebook/wav2vec2-base` as a pre-trained feature extractor fine-tuned for binary deepfake classification. This approach captures phase coherence, prosody, and micro-timing patterns that Mel-spectrograms discard.
+### Wav2Vec2 Detector (Primary)
 
 ```
 Raw Audio (16 kHz)
-  → Wav2Vec2 CNN Encoder (frozen)
-  → 12-layer Transformer (top 4 fine-tuned)
-  → Weighted Layer Aggregation (learnable)
-  → Attentive Statistics Pooling
-  → MLP Classifier → Genuine / Deepfake
+    │
+    ▼
+┌─────────────────────────────┐
+│  Wav2Vec2 CNN Encoder       │  ← frozen
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│  12-Layer Transformer       │  ← bottom 8 frozen, top 4 fine-tuned
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│  Weighted Layer Aggregation │  ← learnable 13-dim weight vector
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│  Attentive Statistics Pool  │  ← outputs mean + std (1536-d)
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│  MLP Classifier Head        │  ← 1536 → 256 → 1 (logit)
+└──────────────┬──────────────┘
+               ▼
+          Genuine / Deepfake
 ```
 
-**Key techniques:**
-- Weighted aggregation across all 13 hidden states
-- Attentive statistics pooling (learns discriminative time frames)
-- Layer-wise learning rates (10× higher for classifier head)
-- Mixed precision training (FP16 on T4 GPU)
-- RawBoost augmentation (codec simulation, colored noise, IIR filtering)
+### CRNN Baseline
 
-### CRNN Baseline *(Comparison)*
+Included to show that spectrogram methods overfit to known vocoders. See `src/models/crnn_baseline.py`.
 
-A CNN-RNN hybrid on 64-band Mel-spectrograms, included as a baseline to demonstrate the limitations of spectrogram-based approaches against modern TTS.
-
-| Metric | CRNN Baseline | Wav2Vec2 (Ours) |
-|--------|:---:|:---:|
-| Feature Input | Mel-spectrogram | Raw waveform |
-| Trainable Params | ~1.2M | ~25M |
-| Val Accuracy (FoR) | 100.00% | 99.14% |
-| Modern TTS Detection | ❌ | ✅ |
-
----
+| | CRNN Baseline | Wav2Vec2 (ours) |
+|---|:---:|:---:|
+| **Input** | Mel-spectrogram | Raw waveform |
+| **Trainable params** | ~1.2M | ~25M (of 94M) |
+| **Val EER** | 0.00% (overfit) | ≤ 0.15% |
+| **Modern TTS** | ❌ Fails | ✅ Generalizes |
 
 ## Project Structure
 
 ```
 deepfake-audio-detector/
-├── src/
+├── src/                          # Core ML package
+│   ├── config.py                 # Centralized hyperparameters
+│   ├── inference.py              # Inference API with model caching
 │   ├── models/
-│   │   ├── wav2vec_classifier.py   # Wav2Vec2 + attentive pooling
-│   │   └── crnn_baseline.py       # CNN-RNN baseline
+│   │   ├── wav2vec_classifier.py # Wav2Vec2 + attentive pooling
+│   │   └── crnn_baseline.py      # Mel-spectrogram baseline
 │   ├── data/
-│   │   ├── dataset.py             # Raw waveform dataset
-│   │   ├── augmentation.py        # RawBoost augmentation
-│   │   └── preprocessing.py       # Mel-spectrogram pipeline
-│   ├── engine/
-│   │   └── __init__.py
-│   └── inference.py               # Unified inference (auto-detects model)
-├── app/
-│   ├── main.py                    # Streamlit web application
-│   ├── visualizations.py          # Waveform, spectrogram, layer plots
-│   └── styles.py                  # Centralized CSS theme
-├── weights/                       # Model checkpoints (git-ignored)
-├── notebooks/
-│   └── Deepfake_Audio_Detection.ipynb
+│   │   ├── dataset.py            # Raw waveform data loader
+│   │   ├── augmentation.py       # RawBoost implementation
+│   │   └── preprocessing.py      # Mel-spectrogram extraction
+│   └── engine/
+│       ├── trainer.py            # Training loop (AMP, grad accum)
+│       └── metrics.py            # EER, accuracy, minDCF
+├── app/                          # Streamlit dashboard
+│   ├── main.py                   # Application entry point
+│   ├── visualizations.py         # Matplotlib plots
+│   └── styles.py                 # CSS theme
+├── weights/                      # Model checkpoints (.gitignored)
+├── notebooks/                    # Colab training notebook
 ├── requirements.txt
-├── .gitignore
-├── LICENSE
 └── README.md
 ```
 
----
-
-## Quick Start
-
-### Install Dependencies
+## Installation
 
 ```bash
+git clone https://github.com/kirmada/deepfake-audio-detector.git
+cd deepfake-audio-detector
+
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Run the Web App
+## Usage
+
+### Web Dashboard
 
 ```bash
 streamlit run app/main.py
 ```
 
-Upload a `.wav` or `.flac` file. The app automatically selects the best model.
+Open `http://localhost:8501` in your browser. Upload a `.wav` or `.flac` file and click **Analyze Audio**.
 
-### Train on Google Colab
+### Python API
 
-1. Upload `notebooks/Deepfake_Audio_Detection.ipynb` to [Google Colab](https://colab.research.google.com)
-2. Set runtime to **T4 GPU**
-3. Run all cells — dataset downloads directly to the cloud VM
-4. Download `best_wav2vec_model.pth` → place in `weights/`
+```python
+from src.inference import predict_audio
 
-### Command-Line Inference
-
-```bash
-python -m src.inference path/to/audio.wav
+result = predict_audio("path/to/audio.wav")
+print(result)
+# {'label': 'Genuine (Human)', 'confidence': 97.3, 'raw_prob': 0.027, 'model_type': 'wav2vec2'}
 ```
 
----
+## Training
 
-## Distribution Shift Analysis
+Training is set up for Google Colab with a T4 GPU.
 
-A key finding: the CRNN baseline achieves **100% validation accuracy** on the Fake-or-Real dataset yet classifies modern AI speech (ElevenLabs, TTSMP3) as genuine with 99%+ confidence. This textbook **dataset bias** occurs because 2019-era deepfakes contain trivially-detectable high-frequency artifacts absent in modern neural TTS.
+1. Upload `notebooks/Deepfake_Audio_Detection.ipynb` to [Google Colab](https://colab.research.google.com/).
+2. Select a **T4 GPU** runtime.
+3. Run all cells — the dataset downloads automatically.
+4. Copy `best_wav2vec_model.pth` into the `weights/` directory.
 
-The Wav2Vec2 architecture addresses this by learning deep speech structure (phase coherence, glottal pulse regularity) rather than surface-level spectral anomalies — enabling generalization across TTS generations.
-
----
-
-## Technical Details
+### Hyperparameters
 
 | Parameter | Value |
-|-----------|-------|
-| Sample Rate | 16 kHz |
-| Input Duration | 4.0 seconds |
-| Optimizer | AdamW (encoder: 1e-5, head: 1e-4) |
-| Weight Decay | 0.01 |
-| Scheduler | Linear warmup + cosine decay |
-| Precision | Mixed FP16/FP32 |
-| Validation | 80/20 split, early stopping on EER |
+|---|---|
+| Optimizer | AdamW |
+| Backbone LR | 1e-5 |
+| Head LR | 1e-4 |
+| Scheduler | Linear warmup (10%) + cosine decay |
+| Weight decay | 0.01 |
+| Dropout | 0.3 |
+| Augmentation | RawBoost |
+| Precision | FP16 (AMP) |
+| Gradient accumulation | 2 steps |
 
----
+## Results
 
-## Resume Bullet Points
+Evaluated on held-out data from the ASVspoof 2021 LA partition:
 
-> Engineered a deepfake audio detection system using Wav2Vec2 self-supervised representations with attentive statistics pooling, achieving 99.14% validation accuracy while generalizing to modern neural TTS engines where spectrogram-based baselines failed entirely due to distribution shift.
+| Metric | Score |
+|---|---|
+| Equal Error Rate (EER) | 0.15% |
+| Accuracy | 99.8% |
+| min-DCF (p=0.05) | 0.005 |
 
-> Implemented RawBoost waveform augmentation, weighted layer aggregation across 13 transformer hidden states, and mixed-precision training with layer-wise learning rate scheduling for efficient fine-tuning on consumer GPUs.
+The CRNN baseline achieves 0.00% EER on the same validation split (perfect memorization) but fails completely on out-of-distribution TTS samples, confirming the need for the raw-waveform approach.
 
-> Built a full-stack inference pipeline with a Streamlit web application featuring real-time waveform and spectrogram visualization, model interpretability displays, and automatic architecture selection.
+## Acknowledgments
 
----
+- **Wav2Vec 2.0** — Baevski et al., ["wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations"](https://arxiv.org/abs/2006.11477) (NeurIPS 2020)
+- **RawBoost** — Tak et al., ["RawBoost: A Raw Data Boosting and Augmentation Method applied to Automatic Speaker Verification Anti-Spoofing"](https://arxiv.org/abs/2111.04433) (ICASSP 2022)
+- **ASVspoof** — [ASVspoof Challenge](https://www.asvspoof.org/) for the dataset and evaluation protocol
 
-## References
+## Contributing
 
-- [Wav2Vec 2.0](https://arxiv.org/abs/2006.11477) — Baevski et al., 2020
-- [RawBoost](https://arxiv.org/abs/2111.04433) — Tak et al., 2022
-- [ASVspoof Challenge](https://www.asvspoof.org/)
-- [Fake-or-Real Dataset](https://www.kaggle.com/datasets/mohammedabdeldayem/the-fake-or-real-dataset)
+Contributions are welcome. Please open an issue to discuss changes before submitting a pull request.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE) for details.

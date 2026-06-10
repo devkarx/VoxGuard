@@ -1,8 +1,8 @@
 """
 Deepfake Audio Detection — Source Package.
 
-A production-grade deepfake audio detection system using Wav2Vec2
-self-supervised speech representations.
+Provides model architectures, data pipelines, training utilities,
+and a unified inference API for detecting AI-generated speech.
 """
 
 __version__ = "1.0.0"

@@ -1,9 +1,9 @@
 """
 Deepfake Audio Detector — Streamlit Web Application.
 
-Provides a professional interface for uploading audio files, running
-deepfake detection inference, and visualizing analysis results including
-waveform, Mel-spectrogram, confidence scoring, and model interpretability.
+Provides an interface for uploading audio files, running deepfake
+detection, and visualizing analysis results including waveform,
+Mel-spectrogram, confidence scoring, and model interpretability.
 
 Usage:
     streamlit run app/main.py
@@ -13,7 +13,7 @@ import os
 import sys
 import tempfile
 
-# Ensure the project root is importable
+# Allow importing from the project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
@@ -27,7 +27,7 @@ from app.visualizations import plot_waveform, plot_mel_spectrogram, plot_layer_w
 
 
 # ---------------------------------------------------------------------------
-# Page configuration
+# Page setup
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Deepfake Audio Detector",
@@ -40,16 +40,16 @@ st.markdown(MAIN_CSS, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Sidebar
+# Sidebar — project info
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown('<div class="sidebar-title">About</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="sidebar-text">'
         "This tool detects AI-generated speech using a Wav2Vec2 "
-        "self-supervised speech model fine-tuned for deepfake detection. "
-        "It analyzes raw waveform structure to identify artifacts invisible "
-        "to traditional spectrogram-based approaches."
+        "self-supervised model fine-tuned for deepfake detection. "
+        "It analyzes raw waveform structure to identify synthesis "
+        "artifacts invisible to spectrogram-based approaches."
         "</div>",
         unsafe_allow_html=True,
     )
@@ -73,13 +73,13 @@ with st.sidebar:
 
 
 # ---------------------------------------------------------------------------
-# Hero
+# Hero section
 # ---------------------------------------------------------------------------
 st.markdown(
     """
     <div class="hero">
         <h1>🎙️ Deepfake Audio Detector</h1>
-        <p class="tagline">Upload an audio clip to detect AI-generated synthetic speech</p>
+        <p class="tagline">Upload an audio clip to check if it's AI-generated</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -87,45 +87,46 @@ st.markdown(
 
 
 # ---------------------------------------------------------------------------
-# Upload
+# File upload
 # ---------------------------------------------------------------------------
 uploaded_file = st.file_uploader(
     "Upload Audio File",
     type=["wav", "flac"],
     label_visibility="collapsed",
-    help="Drag and drop a .wav or .flac file",
+    help="Drag and drop a .wav or .flac file (up to 200 MB)",
 )
 
 if uploaded_file is not None:
     st.audio(uploaded_file, format="audio/wav")
 
     if st.button("🔍  Analyze Audio", use_container_width=True, type="primary"):
-        with st.spinner("Running deepfake analysis..."):
+        with st.spinner("Running deepfake analysis…"):
+            # Write the upload to a temporary file for processing
             suffix = "." + uploaded_file.name.rsplit(".", 1)[-1]
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
 
             try:
-                # Load audio for visualization
+                # Load audio samples for the visualizations
                 audio_data, sample_rate = sf.read(tmp_path)
                 if len(audio_data.shape) > 1:
                     audio_data = audio_data.mean(axis=1)
 
-                # ----- Run Inference -----
+                # ---- Inference ----
                 result = predict_audio(tmp_path)
 
                 is_genuine = "Genuine" in result["label"]
-                css = "result-genuine" if is_genuine else "result-deepfake"
-                color = "text-green" if is_genuine else "text-red"
+                css_class = "result-genuine" if is_genuine else "result-deepfake"
+                text_class = "text-green" if is_genuine else "text-red"
                 icon = "🛡️" if is_genuine else "⚠️"
                 model_name = "Wav2Vec2" if result["model_type"] == "wav2vec2" else "CRNN Baseline"
 
-                # ----- Result Card -----
+                # ---- Result card ----
                 st.markdown(
                     f"""
-                    <div class="result-card {css}">
-                        <h2 class="{color}">{icon} {result['label']}</h2>
+                    <div class="result-card {css_class}">
+                        <h2 class="{text_class}">{icon} {result['label']}</h2>
                         <p class="conf">Confidence: <strong>{result['confidence']:.2f}%</strong></p>
                         <div class="model-badge">Model: {model_name}</div>
                     </div>
@@ -133,7 +134,20 @@ if uploaded_file is not None:
                     unsafe_allow_html=True,
                 )
 
-                # ----- Score Breakdown -----
+                # ---- Confidence gauge ----
+                gauge_class = "gauge-fill-green" if is_genuine else "gauge-fill-red"
+                st.markdown(
+                    f"""
+                    <div class="gauge-track">
+                        <div class="gauge-fill {gauge_class}" style="width: {result['confidence']:.1f}%;"></div>
+                    </div>
+                    <p class="gauge-label">{result['confidence']:.1f}% confidence</p>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # ---- Score breakdown ----
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.markdown(
@@ -160,8 +174,9 @@ if uploaded_file is not None:
                         f"</div>",
                         unsafe_allow_html=True,
                     )
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                # ----- Audio Metadata -----
+                # ---- Audio metadata ----
                 st.markdown('<p class="section-label">📋 Audio Metadata</p>', unsafe_allow_html=True)
                 meta_col1, meta_col2, meta_col3 = st.columns(3)
                 with meta_col1:
@@ -170,38 +185,58 @@ if uploaded_file is not None:
                     st.metric("Samples", f"{len(audio_data):,}")
                 with meta_col3:
                     size_kb = uploaded_file.size / 1024
-                    unit = "KB" if size_kb < 1024 else "MB"
-                    size_val = size_kb if size_kb < 1024 else size_kb / 1024
-                    st.metric("File Size", f"{size_val:.1f} {unit}")
+                    if size_kb < 1024:
+                        st.metric("File Size", f"{size_kb:.1f} KB")
+                    else:
+                        st.metric("File Size", f"{size_kb / 1024:.1f} MB")
 
-                # ----- Waveform -----
-                st.markdown('<p class="section-label">📊 Waveform Analysis</p>', unsafe_allow_html=True)
+                # ---- Waveform plot ----
+                st.markdown('<p class="section-label">📊 Waveform</p>', unsafe_allow_html=True)
                 fig_wave = plot_waveform(audio_data, sample_rate)
                 st.pyplot(fig_wave)
                 plt.close(fig_wave)
 
-                # ----- Mel-Spectrogram -----
+                # ---- Mel-spectrogram ----
                 st.markdown('<p class="section-label">🌈 Mel-Spectrogram</p>', unsafe_allow_html=True)
                 fig_mel = plot_mel_spectrogram(audio_data, sample_rate)
                 st.pyplot(fig_mel)
                 plt.close(fig_mel)
 
-                # ----- Layer Weights (Wav2Vec2 only) -----
+                # ---- Layer weights (Wav2Vec2 only) ----
                 if result["model_type"] == "wav2vec2":
-                    layer_w = get_layer_weights()
-                    if layer_w is not None:
+                    layer_weights = get_layer_weights()
+                    if layer_weights is not None:
                         st.markdown(
                             '<p class="section-label">🧠 Wav2Vec2 Layer Contributions</p>',
                             unsafe_allow_html=True,
                         )
-                        fig_lw = plot_layer_weights(layer_w)
+                        fig_lw = plot_layer_weights(layer_weights)
                         st.pyplot(fig_lw)
                         plt.close(fig_lw)
 
             except FileNotFoundError as exc:
                 st.error(f"⚠️ {exc}")
             except Exception as exc:
-                st.error(f"Analysis failed: {exc}")
+                st.error(
+                    f"Something went wrong during analysis. "
+                    f"Please make sure the audio file is valid and try again.\n\n"
+                    f"Details: {exc}"
+                )
             finally:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+    <div class="app-footer">
+        <p>
+            Built with Wav2Vec2 &middot; PyTorch &middot; Streamlit
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)

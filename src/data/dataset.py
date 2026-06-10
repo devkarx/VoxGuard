@@ -1,8 +1,10 @@
 """
-Raw Waveform Dataset for Wav2Vec2 Training.
+Raw Waveform Dataset for Wav2Vec2 training and evaluation.
 
-Loads audio as raw 16 kHz float32 waveforms — no spectrogram conversion.
-Optionally applies RawBoost augmentation during training.
+Loads audio as raw 16 kHz float32 waveforms with no spectrogram
+conversion. Supports both directory-based label discovery and
+ASVspoof-style protocol files. Optionally applies RawBoost
+augmentation during training.
 """
 
 import logging
@@ -15,27 +17,18 @@ import soundfile as sf
 from torch.utils.data import Dataset
 from torchaudio import transforms as T
 
+from src.config import AudioConfig, TrainingConfig
 from src.data.augmentation import RawBoostAugmentor
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-_SAMPLE_RATE = 16000
-_DURATION = 4.0       # seconds
-_TARGET_LENGTH = int(_SAMPLE_RATE * _DURATION)
-
-# Default binary label mapping (case-insensitive)
-_DEFAULT_CLASS_MAP: Dict[str, int] = {
-    "genuine": 0, "bonafide": 0, "real": 0,
-    "spoof": 1,  "deepfake": 1, "fake": 1,
-}
+_audio_cfg = AudioConfig()
+_train_cfg = TrainingConfig()
 
 
 class RawWaveformDataset(Dataset):
     """
-    PyTorch Dataset that serves raw waveforms for Wav2Vec2 training/inference.
+    PyTorch Dataset that serves fixed-length raw waveforms.
 
     Discovers audio files by scanning subdirectory names (e.g. ``real/``,
     ``fake/``) or by reading an ASVspoof-style protocol file.
@@ -43,9 +36,9 @@ class RawWaveformDataset(Dataset):
     Args:
         data_dir:       Root directory containing audio files.
         metadata_file:  Optional ASVspoof protocol file with per-file labels.
-        target_sr:      Sample rate to resample to (default: 16 kHz).
-        target_duration: Duration in seconds to pad/crop to (default: 4.0).
-        class_mapping:  Custom string → int label map (default provided).
+        target_sr:      Sample rate to resample to.
+        target_duration: Duration in seconds to pad/crop to.
+        class_mapping:  Custom string → int label map.
         is_training:    If True, apply RawBoost augmentation and random crop.
     """
 
@@ -53,8 +46,8 @@ class RawWaveformDataset(Dataset):
         self,
         data_dir: Union[str, Path],
         metadata_file: Optional[Union[str, Path]] = None,
-        target_sr: int = _SAMPLE_RATE,
-        target_duration: float = _DURATION,
+        target_sr: int = _audio_cfg.sample_rate,
+        target_duration: float = _audio_cfg.duration,
         class_mapping: Optional[Dict[str, int]] = None,
         is_training: bool = False,
     ) -> None:
@@ -63,7 +56,7 @@ class RawWaveformDataset(Dataset):
         self.target_sr = target_sr
         self.target_length = int(target_sr * target_duration)
         self.is_training = is_training
-        self.class_mapping = class_mapping or _DEFAULT_CLASS_MAP
+        self.class_mapping = class_mapping or _train_cfg.class_mapping
 
         self.augmentor = RawBoostAugmentor(sample_rate=target_sr) if is_training else None
         self._resampler_cache: dict = {}
@@ -86,21 +79,24 @@ class RawWaveformDataset(Dataset):
             self._load_from_directories()
 
         logger.info(
-            "Loaded %d files (real: %d, fake: %d)",
+            "Loaded %d files (genuine=%d, spoof=%d)",
             len(self.file_paths), self.labels.count(0), self.labels.count(1),
         )
 
     def _load_from_protocol(self) -> None:
-        """Parse ASVspoof-style protocol file."""
+        """Parse ASVspoof-style protocol: SPEAKER_ID UTTI_ID - SYSTEM LABEL."""
         with open(self.metadata_file, "r") as fh:
             for line in fh:
                 parts = line.strip().split()
                 if len(parts) < 5:
                     continue
-                filename, label_str = parts[1], parts[-1].lower()
+
+                filename = parts[1]
+                label_str = parts[-1].lower()
                 if label_str not in self.class_mapping:
                     continue
 
+                # Try .flac first (ASVspoof default), fall back to .wav
                 path = self.data_dir / f"{filename}.flac"
                 if not path.exists():
                     path = self.data_dir / f"{filename}.wav"
@@ -118,32 +114,35 @@ class RawWaveformDataset(Dataset):
                     self.labels.append(self.class_mapping[parent])
 
     # ------------------------------------------------------------------
-    # Audio loading
+    # Audio loading & normalization
     # ------------------------------------------------------------------
     def _load_audio(self, file_path: Path) -> torch.Tensor:
-        """Load, resample, and pad/crop a single audio file."""
+        """Load, resample, and normalize a single audio file to a fixed length."""
         audio, sr = sf.read(str(file_path))
 
-        # Mono
+        # Convert to mono
         if len(audio.shape) > 1:
             audio = audio.mean(axis=1)
         waveform = torch.from_numpy(audio).float()
 
-        # Resample
+        # Resample to target rate if needed
         if sr != self.target_sr:
             if sr not in self._resampler_cache:
                 self._resampler_cache[sr] = T.Resample(sr, self.target_sr)
             waveform = self._resampler_cache[sr](waveform)
 
-        # Pad or crop
+        # Pad short clips or crop long ones
         n = waveform.shape[0]
         if n < self.target_length:
             waveform = torch.nn.functional.pad(waveform, (0, self.target_length - n))
         elif n > self.target_length:
-            start = random.randint(0, n - self.target_length) if self.is_training else (n - self.target_length) // 2
+            if self.is_training:
+                start = random.randint(0, n - self.target_length)
+            else:
+                start = (n - self.target_length) // 2
             waveform = waveform[start : start + self.target_length]
 
-        # Peak-normalize
+        # Peak-normalize to [-1, 1]
         peak = waveform.abs().max()
         if peak > 0:
             waveform = waveform / peak
@@ -157,8 +156,9 @@ class RawWaveformDataset(Dataset):
         return len(self.file_paths)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
-        """Return (waveform, label) where waveform is shape (target_length,)."""
-        path, label = self.file_paths[idx], self.labels[idx]
+        """Return (waveform, label) where waveform has shape (target_length,)."""
+        path = self.file_paths[idx]
+        label = self.labels[idx]
 
         try:
             waveform = self._load_audio(path)
@@ -169,3 +169,12 @@ class RawWaveformDataset(Dataset):
         except Exception as exc:
             logger.error("Failed to load %s: %s", path, exc)
             return torch.zeros(self.target_length), label
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"n_files={len(self)}, "
+            f"sr={self.target_sr}, "
+            f"duration={self.target_length / self.target_sr:.1f}s, "
+            f"training={self.is_training})"
+        )
