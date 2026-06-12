@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎙️ Deepfake Audio Detection
+# 🎙️ VoxGuard: Self-Supervised Deepfake Audio Detection
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg)](https://pytorch.org/)
