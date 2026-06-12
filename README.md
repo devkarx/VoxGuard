@@ -78,7 +78,7 @@ Included to show that spectrogram methods overfit to known vocoders. See `src/mo
 ## Project Structure
 
 ```
-deepfake-audio-detector/
+VoxGuard/
 ├── src/                          # Core ML package
 │   ├── config.py                 # Centralized hyperparameters
 │   ├── inference.py              # Inference API with model caching
@@ -105,8 +105,8 @@ deepfake-audio-detector/
 ## Installation
 
 ```bash
-git clone https://github.com/kirmada/deepfake-audio-detector.git
-cd deepfake-audio-detector
+git clone https://github.com/devkarx/VoxGuard.git
+cd VoxGuard
 
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
