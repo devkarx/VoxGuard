@@ -18,9 +18,10 @@ import torch
 
 
 # Augmentation parameter ranges
-_SNR_RANGE = (15, 40)         # dB — conservative to avoid destroying the signal
+# dB — conservative to avoid destroying the signal
+_SNR_RANGE = (15, 40)
 _BIT_DEPTHS = (8, 12, 14)     # simulate low-bitrate codecs
-_FILTER_COEFF = (-0.95, 0.95) # IIR filter coefficient range
+_FILTER_COEFF = (-0.95, 0.95)  # IIR filter coefficient range
 _GAIN_RANGE = (-6, 6)         # dB gain perturbation
 
 

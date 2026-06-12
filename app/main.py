@@ -9,21 +9,18 @@ Usage:
     streamlit run app/main.py
 """
 
+from app.visualizations import plot_waveform, plot_mel_spectrogram, plot_layer_weights
+from app.styles import MAIN_CSS
+from src.inference import predict_audio, get_layer_weights
+import matplotlib.pyplot as plt
+import streamlit as st
+import soundfile as sf
 import os
 import sys
 import tempfile
 
 # Allow importing from the project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import numpy as np
-import soundfile as sf
-import streamlit as st
-import matplotlib.pyplot as plt
-
-from src.inference import predict_audio, get_layer_weights
-from app.styles import MAIN_CSS
-from app.visualizations import plot_waveform, plot_mel_spectrogram, plot_layer_weights
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +40,8 @@ st.markdown(MAIN_CSS, unsafe_allow_html=True)
 # Sidebar — project info
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown('<div class="sidebar-title">About</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-title">About</div>',
+                unsafe_allow_html=True)
     st.markdown(
         '<div class="sidebar-text">'
         "This tool detects AI-generated speech using a Wav2Vec2 "
@@ -54,7 +52,8 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="sidebar-title">How It Works</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-title">How It Works</div>',
+                unsafe_allow_html=True)
     st.markdown(
         '<div class="sidebar-text">'
         "<strong>1.</strong> Audio is loaded as a raw 16 kHz waveform<br>"
@@ -65,7 +64,8 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="sidebar-title">Supported Formats</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-title">Supported Formats</div>',
+                unsafe_allow_html=True)
     st.markdown(
         '<div class="sidebar-text">WAV &bull; FLAC &bull; Up to 200 MB</div>',
         unsafe_allow_html=True,
@@ -177,7 +177,8 @@ if uploaded_file is not None:
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 # ---- Audio metadata ----
-                st.markdown('<p class="section-label">📋 Audio Metadata</p>', unsafe_allow_html=True)
+                st.markdown(
+                    '<p class="section-label">📋 Audio Metadata</p>', unsafe_allow_html=True)
                 meta_col1, meta_col2, meta_col3 = st.columns(3)
                 with meta_col1:
                     st.metric("Sample Rate", f"{sample_rate:,} Hz")
@@ -191,13 +192,15 @@ if uploaded_file is not None:
                         st.metric("File Size", f"{size_kb / 1024:.1f} MB")
 
                 # ---- Waveform plot ----
-                st.markdown('<p class="section-label">📊 Waveform</p>', unsafe_allow_html=True)
+                st.markdown('<p class="section-label">📊 Waveform</p>',
+                            unsafe_allow_html=True)
                 fig_wave = plot_waveform(audio_data, sample_rate)
                 st.pyplot(fig_wave)
                 plt.close(fig_wave)
 
                 # ---- Mel-spectrogram ----
-                st.markdown('<p class="section-label">🌈 Mel-Spectrogram</p>', unsafe_allow_html=True)
+                st.markdown(
+                    '<p class="section-label">🌈 Mel-Spectrogram</p>', unsafe_allow_html=True)
                 fig_mel = plot_mel_spectrogram(audio_data, sample_rate)
                 st.pyplot(fig_mel)
                 plt.close(fig_mel)

@@ -51,7 +51,8 @@ class Wav2Vec2DeepfakeDetector(nn.Module):
         # Initialized uniformly — the model learns which layers matter most
         # for detecting deepfakes during training.
         self.layer_weights = nn.Parameter(
-            torch.ones(_cfg.wav2vec_num_hidden_states) / _cfg.wav2vec_num_hidden_states
+            torch.ones(_cfg.wav2vec_num_hidden_states) /
+            _cfg.wav2vec_num_hidden_states
         )
 
         # Attentive statistics pooling
@@ -85,14 +86,16 @@ class Wav2Vec2DeepfakeDetector(nn.Module):
         # Weighted aggregation across layers
         stacked = torch.stack(hidden_states, dim=0)          # (13, B, T, 768)
         weights = torch.softmax(self.layer_weights, dim=0)
-        weighted = (stacked * weights.view(-1, 1, 1, 1)).sum(dim=0)  # (B, T, 768)
+        weighted = (stacked * weights.view(-1, 1, 1, 1)
+                    ).sum(dim=0)  # (B, T, 768)
 
         # Attentive statistics pooling — learn which time frames matter
         attn_scores = self.attention(weighted)                # (B, T, 1)
         attn_weights = torch.softmax(attn_scores, dim=1)     # (B, T, 1)
 
         mean = (weighted * attn_weights).sum(dim=1)           # (B, 768)
-        variance = ((weighted - mean.unsqueeze(1)) ** 2 * attn_weights).sum(dim=1)
+        variance = ((weighted - mean.unsqueeze(1))
+                    ** 2 * attn_weights).sum(dim=1)
         std = torch.sqrt(variance + 1e-8)                    # (B, 768)
 
         pooled = torch.cat([mean, std], dim=1)                # (B, 1536)
@@ -115,6 +118,8 @@ class Wav2Vec2DeepfakeDetector(nn.Module):
 
     def count_parameters(self) -> dict:
         """Return trainable vs. frozen parameter counts."""
-        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        frozen = sum(p.numel() for p in self.parameters() if not p.requires_grad)
+        trainable = sum(p.numel()
+                        for p in self.parameters() if p.requires_grad)
+        frozen = sum(p.numel()
+                     for p in self.parameters() if not p.requires_grad)
         return {"trainable_params": trainable, "frozen_params": frozen, "total": trainable + frozen}

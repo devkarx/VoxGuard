@@ -70,7 +70,8 @@ def predict_audio(file_path: str, model_path: Optional[str] = None) -> dict:
         model = _load_crnn(resolved_path, device)
         features = _preprocess_melspec(file_path)
         if features is None:
-            raise ValueError("Failed to extract Mel-spectrogram from the audio file.")
+            raise ValueError(
+                "Failed to extract Mel-spectrogram from the audio file.")
         features = features.unsqueeze(0).to(device)
         model_type = "crnn"
 
@@ -81,7 +82,8 @@ def predict_audio(file_path: str, model_path: Optional[str] = None) -> dict:
     is_deepfake = prob > 0.5
     confidence = (prob if is_deepfake else 1.0 - prob) * 100.0
 
-    logger.info("Prediction: %s (confidence=%.2f%%)", "DEEPFAKE" if is_deepfake else "GENUINE", confidence)
+    logger.info("Prediction: %s (confidence=%.2f%%)",
+                "DEEPFAKE" if is_deepfake else "GENUINE", confidence)
 
     return {
         "label": "Deepfake (AI-Generated)" if is_deepfake else "Genuine (Human)",
@@ -188,7 +190,7 @@ def _preprocess_raw(file_path: str) -> torch.Tensor:
         waveform = torch.nn.functional.pad(waveform, (0, target - n))
     elif n > target:
         start = (n - target) // 2
-        waveform = waveform[start : start + target]
+        waveform = waveform[start: start + target]
 
     # Peak-normalize
     peak = waveform.abs().max()

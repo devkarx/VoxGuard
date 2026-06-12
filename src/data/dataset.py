@@ -58,7 +58,8 @@ class RawWaveformDataset(Dataset):
         self.is_training = is_training
         self.class_mapping = class_mapping or _train_cfg.class_mapping
 
-        self.augmentor = RawBoostAugmentor(sample_rate=target_sr) if is_training else None
+        self.augmentor = RawBoostAugmentor(
+            sample_rate=target_sr) if is_training else None
         self._resampler_cache: dict = {}
 
         self.file_paths: List[Path] = []
@@ -71,7 +72,8 @@ class RawWaveformDataset(Dataset):
     def _discover_files(self) -> None:
         """Populate file_paths and labels from directory structure or metadata."""
         if not self.data_dir.exists():
-            raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
+            raise FileNotFoundError(
+                f"Data directory not found: {self.data_dir}")
 
         if self.metadata_file and self.metadata_file.exists():
             self._load_from_protocol()
@@ -134,13 +136,14 @@ class RawWaveformDataset(Dataset):
         # Pad short clips or crop long ones
         n = waveform.shape[0]
         if n < self.target_length:
-            waveform = torch.nn.functional.pad(waveform, (0, self.target_length - n))
+            waveform = torch.nn.functional.pad(
+                waveform, (0, self.target_length - n))
         elif n > self.target_length:
             if self.is_training:
                 start = random.randint(0, n - self.target_length)
             else:
                 start = (n - self.target_length) // 2
-            waveform = waveform[start : start + self.target_length]
+            waveform = waveform[start: start + self.target_length]
 
         # Peak-normalize to [-1, 1]
         peak = waveform.abs().max()

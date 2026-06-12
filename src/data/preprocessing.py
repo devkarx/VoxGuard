@@ -79,13 +79,15 @@ class AudioPreprocessor:
 
             # Resample if the source rate doesn't match
             if sample_rate != self.target_sample_rate:
-                resampler = transforms.Resample(sample_rate, self.target_sample_rate)
+                resampler = transforms.Resample(
+                    sample_rate, self.target_sample_rate)
                 waveform = resampler(waveform)
 
             # Pad or truncate to fixed length
             length = waveform.shape[1]
             if length < self.target_length:
-                waveform = torch.nn.functional.pad(waveform, (0, self.target_length - length))
+                waveform = torch.nn.functional.pad(
+                    waveform, (0, self.target_length - length))
             elif length > self.target_length:
                 waveform = waveform[:, :self.target_length]
 

@@ -55,7 +55,8 @@ class Trainer:
         device: Optional[torch.device] = None,
     ) -> None:
         self.config = config or TrainingConfig()
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
 
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -66,7 +67,8 @@ class Trainer:
         self.scheduler = self._build_scheduler()
 
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.config.use_amp)
-        self.writer = SummaryWriter(log_dir=self.config.log_dir) if SummaryWriter else None
+        self.writer = SummaryWriter(
+            log_dir=self.config.log_dir) if SummaryWriter else None
 
         self.best_eer = float("inf")
 
@@ -84,10 +86,12 @@ class Trainer:
 
             # Log to TensorBoard (if available)
             if self.writer:
-                self.writer.add_scalars("loss", {"train": train_loss, "val": val_loss}, epoch)
+                self.writer.add_scalars(
+                    "loss", {"train": train_loss, "val": val_loss}, epoch)
                 self.writer.add_scalar("metrics/eer", eer, epoch)
                 self.writer.add_scalar("metrics/accuracy", accuracy, epoch)
-                self.writer.add_scalar("lr", self.optimizer.param_groups[0]["lr"], epoch)
+                self.writer.add_scalar(
+                    "lr", self.optimizer.param_groups[0]["lr"], epoch)
 
             logger.info(
                 "Epoch %02d  train_loss=%.4f  val_loss=%.4f  EER=%.4f  acc=%.4f",
@@ -129,7 +133,8 @@ class Trainer:
 
             if step % self.config.gradient_accumulation_steps == 0:
                 self.scaler.unscale_(self.optimizer)
-                nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+                nn.utils.clip_grad_norm_(
+                    self.model.parameters(), self.config.max_grad_norm)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad()
@@ -206,7 +211,8 @@ class Trainer:
         def lr_lambda(current_step: int) -> float:
             if current_step < warmup_steps:
                 return current_step / warmup_steps
-            progress = (current_step - warmup_steps) / max(1, total_steps - warmup_steps)
+            progress = (current_step - warmup_steps) / \
+                max(1, total_steps - warmup_steps)
             return max(0.0, 0.5 * (1.0 + np.cos(np.pi * progress)))
 
         return torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)

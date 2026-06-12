@@ -85,7 +85,8 @@ class DeepfakeCRNN(nn.Module):
 
         # (B, C, F, T) → (B, T, C*F) for the LSTM
         batch, channels, freq, time = x.size()
-        x = x.permute(0, 3, 1, 2).contiguous().view(batch, time, channels * freq)
+        x = x.permute(0, 3, 1, 2).contiguous().view(
+            batch, time, channels * freq)
 
         lstm_out, _ = self.lstm(x)
 
