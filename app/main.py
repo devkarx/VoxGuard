@@ -1,5 +1,5 @@
 """
-Deepfake Audio Detector — Streamlit Web Application.
+VoxGuard — Streamlit Web Application.
 
 Provides an interface for uploading audio files, running deepfake
 detection, and visualizing analysis results including waveform,
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Page setup
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Deepfake Audio Detector",
+    page_title="VoxGuard",
     page_icon="🎙️",
     layout="centered",
     initial_sidebar_state="expanded",
@@ -78,7 +78,7 @@ with st.sidebar:
 st.markdown(
     """
     <div class="hero">
-        <h1>🎙️ Deepfake Audio Detector</h1>
+        <h1>🎙️ VoxGuard</h1>
         <p class="tagline">Upload an audio clip to check if it's AI-generated</p>
     </div>
     """,
